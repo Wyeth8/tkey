@@ -12,23 +12,19 @@ import stringify from "json-stable-stringify";
 import { keccak256 } from "web3-utils";
 
 import ThresholdKey from "../src/index";
-import {
-  assignTssDkgKeys,
-  fetchPostboxKeyAndSigs,
-  getMetadataUrl,
-  getServiceProvider,
-  initStorageLayer,
-  isMocked,
-  setupTSS,
-  setupTSSMocks,
-} from "./helpers";
+import { generateVerifierId, getMetadataUrl, setupTSS } from "./helpers";
 const metadataURL = getMetadataUrl();
 
 // eslint-disable-next-line mocha/no-exports
 export const tssSharedTests = (mode, torusSP, storageLayer, MOCK_RSS) => {
   const customSP = torusSP;
   const customSL = storageLayer;
-  describe.only("TSS tests", function () {
+  let verifierId;
+
+  describe("TSS tests", function () {
+    before(function () {
+      verifierId = generateVerifierId();
+    });
     it("#should be able to refresh tss shares", async function () {
       const sp = customSP;
       if (!sp.useTSS) this.skip();
@@ -37,7 +33,8 @@ export const tssSharedTests = (mode, torusSP, storageLayer, MOCK_RSS) => {
       const deviceTSSIndex = 2;
 
       sp.verifierName = "torus-test-health";
-      sp.verifierId = "test19@example.com";
+      // expect new account, use new random verifierId
+      sp.verifierId = generateVerifierId();
       const { signatures, serverDKGPrivKeys } = await setupTSS({
         serviceProvider: sp,
         verifierName: sp.verifierName,
@@ -48,16 +45,15 @@ export const tssSharedTests = (mode, torusSP, storageLayer, MOCK_RSS) => {
       });
 
       const testId = sp.getVerifierNameVerifierId();
-      // const storageLayer = initStorageLayer({ hostUrl: metadataURL });
       const tb1 = new ThresholdKey({ serviceProvider: sp, storageLayer, manualSync: mode });
-
       // factor key needs to passed from outside of tKey
       const factorKey = new BN(generatePrivate());
       const factorPub = getPubKeyPoint(factorKey);
 
+      await tb1.initialize({ useTSS: true, factorPub, deviceTSSShare, deviceTSSIndex });
+      await tb1.reconstructKey();
       const tssModule = new TSSModule(tb1);
       await tssModule.initializeWithTss({ factorPub, deviceTSSShare, deviceTSSIndex });
-
       const newShare = await tb1.generateNewShare();
       const reconstructedKey = await tb1.reconstructKey();
       await tb1.syncLocalMetadataTransitions();
@@ -137,7 +133,8 @@ export const tssSharedTests = (mode, torusSP, storageLayer, MOCK_RSS) => {
       const deviceTSSIndex = 3;
 
       sp.verifierName = "torus-test-health";
-      sp.verifierId = "test@example.com";
+      // expect new account, use new random verifierId
+      sp.verifierId = generateVerifierId();
       // const { postboxkey } = await fetchPostboxKeyAndSigs({
       //   serviceProvider: sp,
       //   verifierName: sp.verifierName,
@@ -153,7 +150,6 @@ export const tssSharedTests = (mode, torusSP, storageLayer, MOCK_RSS) => {
         MOCK_RSS,
       });
 
-      // const storageLayer = initStorageLayer({ hostUrl: metadataURL });
       const tb1 = new ThresholdKey({ serviceProvider: sp, storageLayer, manualSync: mode });
 
       // factor key needs to passed from outside of tKey
@@ -185,7 +181,8 @@ export const tssSharedTests = (mode, torusSP, storageLayer, MOCK_RSS) => {
       if (!sp.useTSS) this.skip();
 
       sp.verifierName = "torus-test-health";
-      sp.verifierId = "test18@example.com";
+      // expect new account, use new random verifierId
+      sp.verifierId = generateVerifierId();
 
       const { serverDKGPrivKeys } = await setupTSS({
         serviceProvider: sp,
@@ -200,7 +197,6 @@ export const tssSharedTests = (mode, torusSP, storageLayer, MOCK_RSS) => {
       const deviceTSSShare = new BN(generatePrivate());
       const deviceTSSIndex = 2;
 
-      // const storageLayer = initStorageLayer({ hostUrl: metadataURL });
       const tb1 = new ThresholdKey({ serviceProvider: sp, storageLayer, manualSync: mode });
 
       // factor key needs to passed from outside of tKey
@@ -236,7 +232,9 @@ export const tssSharedTests = (mode, torusSP, storageLayer, MOCK_RSS) => {
       const deviceTSSIndex = 3;
 
       sp.verifierName = "torus-test-health";
-      sp.verifierId = "test18@example.com";
+      // expect new account, use new random verifierId
+      sp.verifierId = generateVerifierId();
+
       const { signatures, serverDKGPrivKeys } = await setupTSS({
         serviceProvider: sp,
         verifierName: sp.verifierName,
@@ -248,7 +246,6 @@ export const tssSharedTests = (mode, torusSP, storageLayer, MOCK_RSS) => {
 
       const testId = sp.getVerifierNameVerifierId();
 
-      const storageLayer = initStorageLayer({ hostUrl: metadataURL });
       const tb1 = new ThresholdKey({ serviceProvider: sp, storageLayer, manualSync: mode });
 
       // factor key needs to passed from outside of tKey
@@ -350,7 +347,7 @@ export const tssSharedTests = (mode, torusSP, storageLayer, MOCK_RSS) => {
         const deviceTSSIndex = 3;
 
         sp.verifierName = "torus-test-health";
-        sp.verifierId = "test192@example.com";
+        sp.verifierId = verifierId;
         const { signatures, serverDKGPrivKeys } = await setupTSS({
           serviceProvider: sp,
           verifierName: sp.verifierName,
@@ -503,7 +500,8 @@ export const tssSharedTests = (mode, torusSP, storageLayer, MOCK_RSS) => {
         const resp1 = await tssModule.tkey._initializeNewKey({ userInput, initializeModules: true });
 
         sp.verifierName = "torus-test-health";
-        sp.verifierId = "test18@example.com";
+        sp.verifierId = verifierId;
+
         const { signatures, serverDKGPrivKeys } = await setupTSS({
           serviceProvider: sp,
           verifierName: sp.verifierName,
@@ -512,6 +510,10 @@ export const tssSharedTests = (mode, torusSP, storageLayer, MOCK_RSS) => {
           tssTag: "default",
           MOCK_RSS,
         });
+
+        let userInput = new BN(keccak256("user answer blublu").slice(2), "hex");
+        userInput = userInput.umod(ecCurve.curve.n);
+        const resp1 = await tb._initializeNewKey({ userInput, initializeModules: true });
 
         const deviceTSSShare = new BN(generatePrivate());
         const deviceTSSIndex = 2;
@@ -559,7 +561,7 @@ export const tssSharedTests = (mode, torusSP, storageLayer, MOCK_RSS) => {
 
         const sp = customSP;
         sp.verifierName = "torus-test-health";
-        sp.verifierId = "test18@example.com";
+        sp.verifierId = verifierId;
         const { signatures, serverDKGPrivKeys } = await setupTSS({
           serviceProvider: sp,
           verifierName: sp.verifierName,
@@ -568,6 +570,10 @@ export const tssSharedTests = (mode, torusSP, storageLayer, MOCK_RSS) => {
           tssTag: "default",
           MOCK_RSS,
         });
+
+        // let userInput = new BN(keccak256("user answer blublu").slice(2), "hex");
+        // userInput = userInput.umod(ecCurve.curve.n);
+        // const resp1 = await tb._initializeNewKey({ userInput, initializeModules: true });
 
         const deviceTSSShare = new BN(generatePrivate());
         const deviceTSSIndex = 2;
@@ -615,7 +621,8 @@ export const tssSharedTests = (mode, torusSP, storageLayer, MOCK_RSS) => {
 
         const sp = customSP;
         sp.verifierName = "torus-test-health";
-        sp.verifierId = "test18@example.com";
+        sp.verifierId = verifierId;
+
         const { signatures, serverDKGPrivKeys } = await setupTSS({
           serviceProvider: sp,
           verifierName: sp.verifierName,
