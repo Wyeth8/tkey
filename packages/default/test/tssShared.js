@@ -50,10 +50,9 @@ export const tssSharedTests = (mode, torusSP, storageLayer, MOCK_RSS) => {
       const factorKey = new BN(generatePrivate());
       const factorPub = getPubKeyPoint(factorKey);
 
-      await tb1.initialize({ useTSS: true, factorPub, deviceTSSShare, deviceTSSIndex });
-      await tb1.reconstructKey();
       const tssModule = new TSSModule(tb1);
       await tssModule.initializeWithTss({ factorPub, deviceTSSShare, deviceTSSIndex });
+      await tb1.reconstructKey();
       const newShare = await tb1.generateNewShare();
       const reconstructedKey = await tb1.reconstructKey();
       await tb1.syncLocalMetadataTransitions();
@@ -62,10 +61,9 @@ export const tssSharedTests = (mode, torusSP, storageLayer, MOCK_RSS) => {
       }
 
       const tb2 = new ThresholdKey({ serviceProvider: sp, storageLayer, manualSync: mode });
-
       const tssModule2 = new TSSModule(tb2);
       await tssModule2.initializeWithTss({ factorPub });
-      // await tb2.initialize({ useTSS: true, factorPub });
+
       tb2.inputShareStore(newShare.newShareStores[newShare.newShareIndex.toString("hex")]);
       await tb2.reconstructKey();
       const { tssShare: retrievedTSS, tssIndex: retrievedTSSIndex } = await tssModule2.getTSSShare(factorKey);
@@ -495,9 +493,6 @@ export const tssSharedTests = (mode, torusSP, storageLayer, MOCK_RSS) => {
       it(`#should serialize and deserialize correctly without tkeyArgs, manualSync=${mode}`, async function () {
         if (!customSP.useTSS) this.skip();
         const sp = customSP;
-        let userInput = new BN(keccak256("user answer blublu").slice(2), "hex");
-        userInput = userInput.umod(ecCurve.curve.n);
-        const resp1 = await tssModule.tkey._initializeNewKey({ userInput, initializeModules: true });
 
         sp.verifierName = "torus-test-health";
         sp.verifierId = verifierId;
@@ -513,7 +508,7 @@ export const tssSharedTests = (mode, torusSP, storageLayer, MOCK_RSS) => {
 
         let userInput = new BN(keccak256("user answer blublu").slice(2), "hex");
         userInput = userInput.umod(ecCurve.curve.n);
-        const resp1 = await tb._initializeNewKey({ userInput, initializeModules: true });
+        const resp1 = await tssModule.tkey._initializeNewKey({ userInput, initializeModules: true });
 
         const deviceTSSShare = new BN(generatePrivate());
         const deviceTSSIndex = 2;
